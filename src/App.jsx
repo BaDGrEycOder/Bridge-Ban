@@ -1,23 +1,28 @@
-import { useEffect, useRef, useState } from 'react'
-import { BookOpen, Check, ChevronDown, CircleHelp, Clock3, FileText, Headphones, Layers3, Mic, Pause, Play, Plus, Search, Sparkles, Square, Upload, Volume2, X } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { BookOpen, Check, ChevronDown, ChevronLeft, CircleHelp, Clock3, FileText, Headphones, Home, Layers3, Mic, Moon, Plus, Search, Settings, Sparkles, Square, Sun, Upload, X } from 'lucide-react'
 
-const initialLessons = [
-  { id: 1, title: 'The Human Cell: Structure & Function', course: 'Biology 101', date: 'Today · 10:30 AM', duration: '42 min', color: 'lavender', transcript: 'Today we are going to look at the structure of a cell. The cell membrane controls what enters and leaves the cell. The nucleus contains DNA, which carries genetic instructions. Mitochondria produce energy through cellular respiration. Remember that ribosomes are responsible for protein synthesis.' },
-  { id: 2, title: 'Foundations of Linear Algebra', course: 'Mathematics', date: 'Yesterday · 2:00 PM', duration: '56 min', color: 'peach', transcript: 'A vector is an object that has both magnitude and direction. Vectors can be added component-wise. A matrix is a rectangular array of numbers and can represent a linear transformation. We use matrix multiplication to compose transformations.' },
-  { id: 3, title: 'The Industrial Revolution', course: 'World History', date: 'Mon, Oct 21 · 9:00 AM', duration: '38 min', color: 'mint', transcript: 'The Industrial Revolution began in Britain in the late eighteenth century. New manufacturing processes and steam power transformed production. Urbanization accelerated as people moved to cities for factory work. These changes reshaped society, labor, and global trade.' },
+const seedClasses = [
+  { id: 'biology', name: 'Biology 101', instructor: 'Dr. Morgan', color: 'lavender', description: 'Cells, genetics, and the living world.' },
+  { id: 'math', name: 'Mathematics', instructor: 'Prof. Chen', color: 'peach', description: 'Build confidence with linear algebra.' },
+  { id: 'history', name: 'World History', instructor: 'Ms. Rivera', color: 'mint', description: 'Ideas and events that shaped our world.' },
 ]
-const summarize = text => {
-  const sentences = text.match(/[^.!?]+[.!?]+/g) || [text]
-  return sentences.map(s => s.trim()).filter(Boolean).slice(0, 4)
-}
-const makeQuestions = text => summarize(text).slice(0, 3).map((s, i) => ({ q: `What is a key idea from this lesson?`, a: s, id: i }))
+const seedLessons = [
+  { id: 1, title: 'The Human Cell: Structure & Function', classId: 'biology', date: 'Today · 10:30 AM', duration: '42 min', color: 'lavender', transcript: 'Today we are going to look at the structure of a cell. The cell membrane controls what enters and leaves the cell. The nucleus contains DNA, which carries genetic instructions. Mitochondria produce energy through cellular respiration. Remember that ribosomes are responsible for protein synthesis.' },
+  { id: 2, title: 'Foundations of Linear Algebra', classId: 'math', date: 'Yesterday · 2:00 PM', duration: '56 min', color: 'peach', transcript: 'A vector is an object that has both magnitude and direction. Vectors can be added component-wise. A matrix is a rectangular array of numbers and can represent a linear transformation. We use matrix multiplication to compose transformations.' },
+  { id: 3, title: 'The Industrial Revolution', classId: 'history', date: 'Mon, Oct 21 · 9:00 AM', duration: '38 min', color: 'mint', transcript: 'The Industrial Revolution began in Britain in the late eighteenth century. New manufacturing processes and steam power transformed production. Urbanization accelerated as people moved to cities for factory work. These changes reshaped society, labor, and global trade.' },
+]
+const readStore = (key, fallback) => { try { return JSON.parse(localStorage.getItem(key)) ?? fallback } catch { return fallback } }
+const summarize = text => (text.match(/[^.!?]+[.!?]+/g) || [text]).map(s => s.trim()).filter(Boolean).slice(0, 4)
+const makeQuestions = text => summarize(text).slice(0, 4).map((s, i) => ({ q: `What is a key idea from this lesson?`, a: s, id: i }))
 
 export default function App() {
-  const [lessons, setLessons] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('student-study-lessons')) || initialLessons } catch { return initialLessons }
-  })
+  const [lessons, setLessons] = useState(() => readStore('student-study-lessons', seedLessons))
+  const [classes, setClasses] = useState(() => readStore('student-study-classes', seedClasses))
+  const [page, setPage] = useState('Home')
+  const [classId, setClassId] = useState('biology')
   const [selectedId, setSelectedId] = useState(1)
   const [tab, setTab] = useState('Overview')
+  const [profile, setProfile] = useState(() => readStore('student-study-profile', { name: 'Alex Morgan', photo: '', theme: 'light' }))
   const [recording, setRecording] = useState(false)
   const [transcript, setTranscript] = useState('')
   const [recordingTitle, setRecordingTitle] = useState('')
@@ -27,90 +32,132 @@ export default function App() {
   const [quizAnswer, setQuizAnswer] = useState(null)
   const [search, setSearch] = useState('')
   const [elapsed, setElapsed] = useState(0)
-  const [summary, setSummary] = useState(false)
+  const [newClassName, setNewClassName] = useState('')
+  const [showNewClass, setShowNewClass] = useState(false)
   const recognitionRef = useRef(null)
   const recorderRef = useRef(null)
   const chunksRef = useRef([])
   const streamRef = useRef(null)
   const selected = lessons.find(l => l.id === selectedId) || lessons[0]
+  const activeClass = classes.find(c => c.id === classId) || classes[0]
   const lessonText = selected?.transcript || ''
-  const questions = makeQuestions(lessonText)
-  const filtered = lessons.filter(l => `${l.title} ${l.course}`.toLowerCase().includes(search.toLowerCase()))
+  const questions = useMemo(() => makeQuestions(lessonText), [lessonText])
+  const filteredLessons = lessons.filter(l => `${l.title} ${classes.find(c => c.id === l.classId)?.name || ''}`.toLowerCase().includes(search.toLowerCase()))
+  const classLessons = lessons.filter(l => l.classId === classId)
   useEffect(() => { localStorage.setItem('student-study-lessons', JSON.stringify(lessons)) }, [lessons])
+  useEffect(() => { localStorage.setItem('student-study-classes', JSON.stringify(classes)) }, [classes])
+  useEffect(() => { localStorage.setItem('student-study-profile', JSON.stringify(profile)); document.documentElement.dataset.theme = profile.theme }, [profile])
   useEffect(() => { if (!recording) return; const timer = setInterval(() => setElapsed(v => v + 1), 1000); return () => clearInterval(timer) }, [recording])
   useEffect(() => () => { recognitionRef.current?.stop(); streamRef.current?.getTracks().forEach(t => t.stop()) }, [])
 
+  const openLesson = lesson => { setSelectedId(lesson.id); setClassId(lesson.classId); setPage('Lectures'); setTab('Overview') }
   const startRecording = async () => {
     setNotice('')
     if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) { setNotice('Audio recording is not supported in this browser. Try a current version of Chrome or Edge over HTTPS.'); return }
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      streamRef.current = stream
-      chunksRef.current = []
-      const recorder = new MediaRecorder(stream)
-      recorderRef.current = recorder
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true }); streamRef.current = stream; chunksRef.current = []
+      const recorder = new MediaRecorder(stream); recorderRef.current = recorder
       recorder.ondataavailable = e => { if (e.data.size) chunksRef.current.push(e.data) }
-      recorder.start()
-      setElapsed(0); setTranscript(''); setRecording(true)
+      recorder.start(); setElapsed(0); setTranscript(''); setRecording(true)
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
       if (SpeechRecognition) {
-        const recognition = new SpeechRecognition()
-        recognition.continuous = true; recognition.interimResults = true; recognition.lang = 'en-US'
+        const recognition = new SpeechRecognition(); recognition.continuous = true; recognition.interimResults = true; recognition.lang = 'en-US'
         recognition.onresult = e => { let text = ''; for (let i = 0; i < e.results.length; i++) text += e.results[i][0].transcript + (e.results[i].isFinal ? '. ' : ' '); setTranscript(text.trim()) }
         recognition.onerror = e => { if (e.error !== 'no-speech') setNotice(`Transcription note: ${e.error}. Recording can continue.`) }
         recognition.start(); recognitionRef.current = recognition
-      } else setNotice('Recording started. Live transcription is not supported in this browser; your audio will still be saved.')
-    } catch (e) { setNotice(e.name === 'NotAllowedError' ? 'Microphone access was denied. Allow microphone access in your browser and try again.' : 'Could not start recording. Check your microphone and try again.') }
+      } else setNotice('Recording started. Live speech transcription varies by browser; audio will still be saved.')
+    } catch (e) { setNotice(e.name === 'NotAllowedError' ? 'Microphone access was denied. Allow microphone access and try again.' : 'Could not start recording. Check your microphone and try again.') }
   }
   const stopRecording = () => {
     setRecording(false); recognitionRef.current?.stop(); recognitionRef.current = null
-    const recorder = recorderRef.current
-    if (!recorder) return
+    const recorder = recorderRef.current; if (!recorder) return
     recorder.onstop = () => {
       const audioUrl = URL.createObjectURL(new Blob(chunksRef.current, { type: recorder.mimeType || 'audio/webm' }))
-      const title = recordingTitle.trim() || `Lecture recording ${new Date().toLocaleDateString()}`
-      const newLesson = { id: Date.now(), title, course: 'New recording', date: 'Just now', duration: `${Math.max(1, Math.round(elapsed / 60))} min`, color: 'lavender', transcript: transcript.trim() || 'No transcript was captured. Your recording is saved; live speech recognition availability varies by browser.' , audioUrl }
-      setLessons(prev => [newLesson, ...prev]); setSelectedId(newLesson.id); setTab('Overview'); setRecordingTitle(''); setNotice('Recording saved.'); streamRef.current?.getTracks().forEach(t => t.stop()); streamRef.current = null
+      const lesson = { id: Date.now(), title: recordingTitle.trim() || `Lecture recording ${new Date().toLocaleDateString()}`, classId: classId || classes[0]?.id, date: 'Just now', duration: `${Math.max(1, Math.round(elapsed / 60))} min`, color: activeClass?.color || 'lavender', transcript: transcript.trim() || 'No transcript was captured. Speech recognition support varies by browser.', audioUrl }
+      setLessons(prev => [lesson, ...prev]); setSelectedId(lesson.id); setPage('Lectures'); setTab('Overview'); setRecordingTitle(''); setNotice('Recording saved.'); streamRef.current?.getTracks().forEach(t => t.stop()); streamRef.current = null
     }
     recorder.stop()
   }
   const uploadAudio = e => {
     const file = e.target.files?.[0]; if (!file) return
-    const title = file.name.replace(/\.[^.]+$/, '')
-    const lesson = { id: Date.now(), title, course: 'Uploaded audio', date: 'Just now', duration: 'Audio file', color: 'peach', transcript: 'Audio uploaded successfully. Browser-only transcription of existing audio files is not consistently supported. Use live recording with a supported browser for speech-to-text, or add a transcription service for uploaded audio.', audioUrl: URL.createObjectURL(file) }
-    setLessons(prev => [lesson, ...prev]); setSelectedId(lesson.id); setTab('Overview'); setNotice('Audio file added. Browser-only transcription of uploaded audio is not available consistently.'); e.target.value = ''
+    const lesson = { id: Date.now(), title: file.name.replace(/\.[^.]+$/, ''), classId, date: 'Just now', duration: 'Audio file', color: activeClass?.color || 'peach', transcript: 'Audio uploaded successfully. Browser-only transcription of existing audio files is not consistently supported. Use live recording with a supported browser or a transcription service.', audioUrl: URL.createObjectURL(file) }
+    setLessons(prev => [lesson, ...prev]); setSelectedId(lesson.id); setPage('Lectures'); setTab('Overview'); setNotice('Audio file added. Browser-only transcription of uploaded audio is not consistently supported.'); e.target.value = ''
   }
+  const addClass = e => { e.preventDefault(); const name = newClassName.trim(); if (!name) return; const id = `class-${Date.now()}`; setClasses(prev => [...prev, { id, name, instructor: 'Your classroom', color: ['lavender','peach','mint'][classes.length % 3], description: 'Your new learning space.' }]); setClassId(id); setNewClassName(''); setShowNewClass(false); setPage('Classroom') }
   const copyText = async text => { try { await navigator.clipboard.writeText(text); setNotice('Copied to clipboard.') } catch { setNotice('Clipboard access is unavailable.') } }
+  const downloadNotes = () => { const blob = new Blob([`${selected.title}\n${activeClass?.name || ''}\n\nSUMMARY\n${summarize(lessonText).map(x => `• ${x}`).join('\n')}\n\nTRANSCRIPT\n${lessonText}`], { type: 'text/plain' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `${selected.title.replace(/[^a-z0-9]+/gi, '-')}-notes.txt`; a.click(); URL.revokeObjectURL(a.href) }
+  const handlePhoto = e => { const file = e.target.files?.[0]; if (!file) return; const reader = new FileReader(); reader.onload = () => setProfile(p => ({ ...p, photo: reader.result })); reader.readAsDataURL(file) }
   const formatTime = n => `${String(Math.floor(n / 60)).padStart(2, '0')}:${String(n % 60).padStart(2, '0')}`
-  const downloadNotes = () => { const blob = new Blob([`${selected.title}\n${selected.course}\n\nSUMMARY\n${summarize(lessonText).map(x => `• ${x}`).join('\n')}\n\nTRANSCRIPT\n${lessonText}`], { type: 'text/plain' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `${selected.title.replace(/[^a-z0-9]+/gi, '-')}-notes.txt`; a.click(); URL.revokeObjectURL(a.href) }
+  const initials = profile.name.trim().split(/\s+/).map(x => x[0]).join('').slice(0, 2).toUpperCase() || 'S'
+  const Avatar = ({ small = false }) => <span className={`avatar ${small ? 'small-avatar' : ''}`}>{profile.photo ? <img src={profile.photo} alt="Profile"/> : initials}</span>
+  const nav = (label, Icon) => <button className={`nav-item ${page === label ? 'active' : ''}`} onClick={() => setPage(label)}><Icon size={18}/>{label}</button>
+  const goClass = id => { setClassId(id); setPage('Classroom') }
 
   return <div className="app-shell">
     <aside className="sidebar">
-      <a className="brand" href="#home"><span className="brand-mark"><BookOpen size={19}/></span><span>student<span className="brand-light">study</span></span></a>
-      <div className="side-label">WORKSPACE</div>
-      <button className="nav-item active"><Layers3 size={18}/> My lessons</button>
-      <button className="nav-item" onClick={() => setNotice('Your study tools are generated from each lesson. Select a lesson to get started.')}><Sparkles size={18}/> Study tools</button>
-      <div className="side-label recent-label">RECENT LESSONS <button aria-label="Add lesson" onClick={() => document.getElementById('upload-audio')?.click()}><Plus size={16}/></button></div>
-      <div className="lesson-list">{lessons.slice(0, 6).map(l => <button key={l.id} onClick={() => {setSelectedId(l.id);setTab('Overview')}} className={`lesson-nav ${l.id === selectedId ? 'chosen' : ''}`}><span className={`lesson-dot ${l.color}`}></span><span>{l.title}</span></button>)}</div>
-      <div className="sidebar-bottom"><div className="upgrade-card"><span className="upgrade-icon"><Sparkles size={17}/></span><strong>Your study space</strong><p>Lessons are saved locally in this browser.</p><span className="local-badge"><span/> PRIVATE & LOCAL</span></div><div className="profile"><div className="avatar">S</div><div><strong>Student</strong><small>My workspace</small></div><ChevronDown size={16}/></div></div>
+      <a className="brand" href="#home" onClick={e => { e.preventDefault(); setPage('Home') }}><span className="brand-mark"><BookOpen size={19}/></span><span>student<span className="brand-light">study</span></span></a>
+      <div className="sidebar-scroll">
+        <div className="side-label">WORKSPACE</div>
+        {nav('Home', Home)}{nav('Classes', Layers3)}{nav('Lectures', Headphones)}{nav('Study tools', Sparkles)}
+        <div className="side-label recent-label">MY CLASSES <button aria-label="Add class" onClick={() => {setShowNewClass(true);setPage('Classes')}}><Plus size={16}/></button></div>
+        <div className="lesson-list">{classes.map(c => <button key={c.id} onClick={() => goClass(c.id)} className={`lesson-nav ${page === 'Classroom' && c.id === classId ? 'chosen' : ''}`}><span className={`lesson-dot ${c.color}`}></span><span>{c.name}</span></button>)}</div>
+        <div className="side-label recent-label">RECENT LECTURES</div>
+        <div className="lesson-list">{lessons.slice(0, 7).map(l => <button key={l.id} onClick={() => openLesson(l)} className={`lesson-nav ${page === 'Lectures' && l.id === selectedId ? 'chosen' : ''}`}><span className={`lesson-dot ${l.color}`}></span><span>{l.title}</span></button>)}</div>
+      </div>
+      <div className="sidebar-bottom"><div className="upgrade-card"><span className="upgrade-icon"><Sparkles size={17}/></span><strong>Your study space</strong><p>Classes and lessons are saved in this browser.</p><span className="local-badge"><span/> PRIVATE & LOCAL</span></div><button className="profile profile-button" onClick={() => setPage('Settings')}><Avatar/><span className="profile-name"><strong>{profile.name}</strong><small>Profile & settings</small></span><Settings size={16}/></button></div>
     </aside>
     <main className="main-content">
-      <header className="topbar"><div className="breadcrumbs">My lessons <span>/</span> <strong>{selected?.title || 'New lesson'}</strong></div><div className="top-actions"><div className="search-box"><Search size={16}/><input aria-label="Search lessons" placeholder="Search lessons..." value={search} onChange={e => setSearch(e.target.value)}/><kbd>⌘ K</kbd></div><button className="icon-btn" aria-label="Help" onClick={() => setNotice('Tip: record over HTTPS and allow microphone access. Live transcription depends on browser support.')}><CircleHelp size={19}/></button><div className="avatar small-avatar">S</div></div></header>
+      <header className="topbar"><div className="breadcrumbs"><button onClick={() => setPage('Home')}>Workspace</button><span>/</span><strong>{page === 'Classroom' ? activeClass?.name : page === 'Lectures' ? selected?.title : page}</strong></div><div className="top-actions"><div className="search-box"><Search size={16}/><input aria-label="Search lessons" placeholder="Search lectures..." value={search} onChange={e => setSearch(e.target.value)}/></div><button className="icon-btn" aria-label="Help" onClick={() => setNotice('Tip: recording requires HTTPS and microphone permission. Browser transcription support varies.')}><CircleHelp size={19}/></button><button className="avatar-button" onClick={() => setPage('Settings')} aria-label="Open profile settings"><Avatar small/></button></div></header>
       <div className="page-wrap">
-        <section className="welcome-row"><div><div className="eyebrow"><span className="wave">✳</span> YOUR PERSONAL LEARNING SPACE</div><h1>Good morning, Alex <span>✦</span></h1><p className="subheading">Ready to make today’s lessons stick?</p></div><div className="date-chip"><span className="date-icon">◷</span> Tuesday, October 22</div></section>
-        <section className="record-card"><div className="record-info"><div className="record-icon"><Mic size={21}/></div><div><h2>Capture a new lesson</h2><p>Record a lecture or bring in an audio file to get started.</p></div></div><div className="record-controls">{recording ? <><div className="recording-status"><span className="live-dot"/> Recording {formatTime(elapsed)}</div><button className="stop-btn" onClick={stopRecording}><Square size={15} fill="currentColor"/> Finish</button></> : <><input className="title-input" aria-label="Recording title" placeholder="Lesson title (optional)" value={recordingTitle} onChange={e => setRecordingTitle(e.target.value)}/><button className="record-btn" onClick={startRecording}><Mic size={16}/> Record</button><label className="upload-btn"><Upload size={16}/> Upload audio<input id="upload-audio" type="file" accept="audio/*" hidden onChange={uploadAudio}/></label></>}</div></section>
         {notice && <div className="notice" role="status">{notice}<button onClick={() => setNotice('')} aria-label="Dismiss"><X size={15}/></button></div>}
-        {recording && <div className="transcribing"><span className="pulse"/> <div><strong>Lecture in progress</strong><p>{transcript || 'Listening for speech… Allow microphone access and speak clearly.'}</p></div></div>}
-        <section className="section-heading"><div><div className="section-overline">PICK UP WHERE YOU LEFT OFF</div><h2>Your lessons <span className="count-pill">{filtered.length}</span></h2></div><button className="sort-button">Recently added <ChevronDown size={15}/></button></section>
-        <section className="lesson-grid">{filtered.map((l, i) => <article key={l.id} className={`lesson-card ${l.id === selectedId ? 'selected-card' : ''}`} onClick={() => {setSelectedId(l.id);setTab('Overview')}}><div className={`card-art ${l.color}`}><div className="art-orb orb-one"/><div className="art-orb orb-two"/><span className="card-art-icon">{i % 3 === 0 ? '✳' : i % 3 === 1 ? '∑' : '◈'}</span><button className="more-btn" aria-label="More options" onClick={e => {e.stopPropagation();setNotice('Lesson options: open a lesson to review or export its notes.')}}>···</button></div><div className="card-body"><div className="course-name">{l.course}</div><h3>{l.title}</h3><div className="card-meta"><span><Clock3 size={14}/>{l.duration}</span><span>{l.date}</span></div><div className="card-divider"/><div className="card-footer"><span className="ready-status"><span/> Ready to study</span><button className="arrow-btn" aria-label={`Open ${l.title}`} onClick={e => {e.stopPropagation();setSelectedId(l.id);setTab('Overview')}}>↗</button></div></div></article>)}{filtered.length === 0 && <div className="empty-state">No lessons match “{search}”.</div>}</section>
-        <section className="detail-panel"><div className="detail-top"><div><div className="course-name">{selected?.course}</div><h2>{selected?.title}</h2><p className="detail-meta">{selected?.date} <span>·</span> {selected?.duration}</p></div><button className="export-btn" onClick={downloadNotes}><FileText size={16}/> Export notes</button></div><nav className="tabs">{['Overview', 'Transcript', 'Flashcards', 'Quiz'].map(t => <button key={t} className={tab === t ? 'tab-active' : ''} onClick={() => {setTab(t);setFlipped(false);setQuizAnswer(null)}}>{t === 'Overview' ? <Sparkles size={15}/> : t === 'Transcript' ? <FileText size={15}/> : t === 'Flashcards' ? <Layers3 size={15}/> : <CircleHelp size={15}/>} {t}</button>)}</nav>
-          {tab === 'Overview' && <div className="overview-content"><div className="summary-column"><h3><span className="mini-spark">✦</span> Lesson summary <span className="ai-tag">BROWSER GENERATED</span></h3><ul>{summarize(lessonText).map((s,i) => <li key={i}>{s}</li>)}</ul><button className="text-action" onClick={() => {setSummary(true);setNotice('Summary is generated from the saved transcript in your browser.')}}>{summary ? 'Summary refreshed ✓' : 'Refresh summary'} <Sparkles size={14}/></button></div><div className="key-points"><h3>Key concepts</h3>{summarize(lessonText).slice(0,3).map((s,i) => <div className="concept" key={i}><span>{String(i + 1).padStart(2,'0')}</span><p>{s.replace(/[.!?]$/, '')}</p></div>)}</div></div>}
-          {tab === 'Transcript' && <div className="transcript-content"><div className="transcript-heading"><h3><Headphones size={17}/> Lecture transcript</h3><button className="text-action" onClick={() => copyText(lessonText)}>Copy text</button></div><p>{lessonText || 'No transcript available for this lesson yet.'}</p>{selected?.audioUrl && <audio controls src={selected.audioUrl} className="audio-player"><Volume2 size={16}/></audio>}</div>}
-          {tab === 'Flashcards' && <div className="study-area"><div className="study-kicker">FLASHCARD {questions.length ? flashIndex + 1 : 0} OF {questions.length}</div><button className={`flashcard ${flipped ? 'flipped' : ''}`} onClick={() => setFlipped(v => !v)}><span className="flash-label">{flipped ? 'ANSWER' : 'QUESTION'}</span><strong>{questions.length ? (flipped ? questions[flashIndex]?.a : questions[flashIndex]?.q) : 'Add a transcript to create flashcards'}</strong><small>Click card to flip</small></button><div className="study-nav"><button disabled={flashIndex === 0} onClick={() => {setFlashIndex(i => Math.max(0,i-1));setFlipped(false)}}>← Previous</button><button disabled={flashIndex >= questions.length - 1} onClick={() => {setFlashIndex(i => Math.min(questions.length - 1,i+1));setFlipped(false)}}>Next →</button></div></div>}
-          {tab === 'Quiz' && <div className="quiz-area">{questions.length ? <><div className="study-kicker">QUICK CHECK · QUESTION 1 OF 1</div><h3>{questions[0]?.q}</h3><div className="quiz-options">{[questions[0]?.a, 'This concept is unrelated to the lesson.', 'The lesson does not mention this topic.'].map((a,i) => <button key={i} className={quizAnswer === i ? (i === 0 ? 'correct' : 'incorrect') : ''} onClick={() => setQuizAnswer(i)}>{String.fromCharCode(65+i)}<span>{a}</span>{quizAnswer === i && i === 0 ? <Check size={17}/> : null}</button>)}</div>{quizAnswer !== null && <p className="feedback">{quizAnswer === 0 ? 'Correct — nice work!' : 'Not quite. Review the lesson summary and try again.'}</p>}</> : <p>Add a transcript to generate a quiz.</p>}</div>}
-        </section>
+        {recording && <div className="transcribing"><span className="pulse"/><div><strong>Lecture in progress · {formatTime(elapsed)}</strong><p>{transcript || 'Listening for speech… Allow microphone access and speak clearly.'}</p><button className="stop-btn" onClick={stopRecording}><Square size={13} fill="currentColor"/> Finish recording</button></div></div>}
+        {page === 'Home' && <>
+          <section className="welcome-row"><div><div className="eyebrow"><span className="wave">✳</span> YOUR PERSONAL LEARNING SPACE</div><h1>Good morning, {profile.name.split(' ')[0]} <span>✦</span></h1><p className="subheading">Ready to make today’s lessons stick?</p></div><div className="date-chip">Your learning dashboard</div></section>
+          <CaptureCard recording={recording} recordingTitle={recordingTitle} setRecordingTitle={setRecordingTitle} startRecording={startRecording} stopRecording={stopRecording} uploadAudio={uploadAudio}/>
+          <section className="section-heading"><div><div className="section-overline">PICK UP WHERE YOU LEFT OFF</div><h2>Recent lectures <span className="count-pill">{filteredLessons.length}</span></h2></div><button className="sort-button" onClick={() => setPage('Lectures')}>All lectures <ChevronDown size={15}/></button></section>
+          <div className="lesson-grid">{filteredLessons.slice(0,3).map((l,i)=><LessonCard key={l.id} lesson={l} className={classes.find(c=>c.id===l.classId)?.name} index={i} open={()=>openLesson(l)}/>)}</div>
+          <section className="section-heading"><div><div className="section-overline">YOUR LEARNING SPACES</div><h2>My classes</h2></div><button className="sort-button" onClick={()=>setPage('Classes')}>View all <ChevronDown size={15}/></button></section>
+          <div className="class-grid">{classes.slice(0,3).map(c=><ClassCard key={c.id} classroom={c} count={lessons.filter(l=>l.classId===c.id).length} open={()=>goClass(c.id)}/>)}</div>
+        </>}
+        {page === 'Classes' && <>
+          <PageHeading eyebrow="YOUR CLASSROOMS" title="Classes" subtitle="Keep each subject, its lectures, and study materials together." action={<button className="primary-button" onClick={()=>setShowNewClass(v=>!v)}><Plus size={16}/> Add class</button>}/>
+          {showNewClass && <form className="new-class-form" onSubmit={addClass}><input autoFocus value={newClassName} onChange={e=>setNewClassName(e.target.value)} placeholder="Class name, e.g. Chemistry 101" aria-label="New class name"/><button className="primary-button" type="submit">Create class</button><button className="quiet-button" type="button" onClick={()=>setShowNewClass(false)}>Cancel</button></form>}
+          <div className="class-grid class-grid-large">{classes.map(c=><ClassCard key={c.id} classroom={c} count={lessons.filter(l=>l.classId===c.id).length} open={()=>goClass(c.id)}/>)}</div>
+        </>}
+        {page === 'Classroom' && <>
+          <button className="back-link" onClick={()=>setPage('Classes')}><ChevronLeft size={16}/> All classes</button>
+          <section className={`class-hero ${activeClass?.color}`}><div className="class-hero-icon"><BookOpen size={24}/></div><div><div className="eyebrow">CLASSROOM</div><h1>{activeClass?.name}</h1><p>{activeClass?.description}</p><span className="instructor">{activeClass?.instructor} · {classLessons.length} {classLessons.length === 1 ? 'lecture' : 'lectures'}</span></div></section>
+          <CaptureCard recording={recording} recordingTitle={recordingTitle} setRecordingTitle={setRecordingTitle} startRecording={startRecording} stopRecording={stopRecording} uploadAudio={uploadAudio}/>
+          <section className="section-heading"><div><div className="section-overline">CLASS MATERIALS</div><h2>Lectures <span className="count-pill">{classLessons.length}</span></h2></div></section>
+          <div className="lesson-grid">{classLessons.map((l,i)=><LessonCard key={l.id} lesson={l} className={activeClass?.name} index={i} open={()=>openLesson(l)}/>)}{!classLessons.length&&<div className="empty-state">No lectures yet. Record or upload a lesson to add it to this class.</div>}</div>
+        </>}
+        {page === 'Lectures' && <>
+          <PageHeading eyebrow="LECTURE LIBRARY" title="Lectures" subtitle="Browse recordings and open a lecture to review notes and study."/>
+          <CaptureCard recording={recording} recordingTitle={recordingTitle} setRecordingTitle={setRecordingTitle} startRecording={startRecording} stopRecording={stopRecording} uploadAudio={uploadAudio}/>
+          <div className="lecture-list-page">{filteredLessons.map(l=><button className={`lecture-row ${selectedId===l.id?'lecture-row-active':''}`} key={l.id} onClick={()=>openLesson(l)}><span className={`lecture-row-icon ${l.color}`}><Headphones size={18}/></span><span className="lecture-row-copy"><strong>{l.title}</strong><small>{classes.find(c=>c.id===l.classId)?.name || 'Unassigned class'} · {l.date}</small></span><span className="lecture-duration"><Clock3 size={14}/>{l.duration}</span><ChevronLeft className="row-chevron" size={17}/></button>)}{!filteredLessons.length&&<div className="empty-state">No lectures found. Try another search or record a new lesson.</div>}</div>
+          {selected && <LectureDetail selected={selected} activeClass={classes.find(c=>c.id===selected.classId)} lessonText={lessonText} tab={tab} setTab={setTab} questions={questions} flashIndex={flashIndex} setFlashIndex={setFlashIndex} flipped={flipped} setFlipped={setFlipped} quizAnswer={quizAnswer} setQuizAnswer={setQuizAnswer} downloadNotes={downloadNotes} copyText={copyText}/>}
+        </>}
+        {page === 'Study tools' && <>
+          <PageHeading eyebrow="PRACTICE & REVIEW" title="Study tools" subtitle="Flashcards and quick checks are created from each lecture transcript."/>
+          {selected && <><div className="tool-source"><span className={`lecture-row-icon ${selected.color}`}><BookOpen size={18}/></span><span><small>STUDYING FROM</small><strong>{selected.title}</strong></span><button className="quiet-button" onClick={()=>setPage('Lectures')}>Choose lecture</button></div><div className="detail-panel study-panel"><div className="tabs">{['Flashcards','Quiz'].map(t=><button key={t} className={tab===t?'tab-active':''} onClick={()=>{setTab(t);setQuizAnswer(null);setFlipped(false)}}>{t==='Quiz'?<CircleHelp size={15}/>:<Layers3 size={15}/>} {t}</button>)}</div>{tab==='Quiz'?<Quiz questions={questions} quizAnswer={quizAnswer} setQuizAnswer={setQuizAnswer}/>:<Flashcards questions={questions} flashIndex={flashIndex} setFlashIndex={setFlashIndex} flipped={flipped} setFlipped={setFlipped}/>}</div></>}
+          {!selected&&<div className="empty-state">Add a lecture to generate study tools.</div>}
+        </>}
+        {page === 'Settings' && <>
+          <PageHeading eyebrow="YOUR ACCOUNT" title="Profile & settings" subtitle="Personalize your study space. Your preferences stay in this browser."/>
+          <section className="settings-card"><h2>Profile</h2><p className="settings-description">Choose how your name and picture appear in Student Study.</p><div className="profile-edit"><Avatar/><div><strong>{profile.name}</strong><small>Profile picture</small></div><label className="secondary-button">Upload photo<input type="file" accept="image/*" hidden onChange={handlePhoto}/></label>{profile.photo&&<button className="quiet-button" onClick={()=>setProfile(p=>({...p,photo:''}))}>Remove</button>}</div><label className="field-label" htmlFor="profile-name">Display name</label><input id="profile-name" className="settings-input" value={profile.name} onChange={e=>setProfile(p=>({...p,name:e.target.value}))} placeholder="Your name"/></section>
+          <section className="settings-card"><h2>Appearance</h2><p className="settings-description">Choose a comfortable theme for studying.</p><div className="theme-options"><button className={`theme-option ${profile.theme==='light'?'theme-selected':''}`} onClick={()=>setProfile(p=>({...p,theme:'light'}))}><Sun size={19}/><span><strong>Light</strong><small>Bright and clear</small></span>{profile.theme==='light'&&<Check size={17}/>}</button><button className={`theme-option ${profile.theme==='dark'?'theme-selected':''}`} onClick={()=>setProfile(p=>({...p,theme:'dark'}))}><Moon size={19}/><span><strong>Dark</strong><small>Easy on the eyes</small></span>{profile.theme==='dark'&&<Check size={17}/>}</button></div></section>
+          <section className="settings-card privacy-card"><span className="upgrade-icon"><Sparkles size={17}/></span><div><h2>Your privacy</h2><p>Profile, classes, and transcripts are stored in this browser's local storage. Clearing browser data will remove them.</p></div></section>
+        </>}
         <footer className="footer-note"><span>✦</span> A little progress adds up. Keep showing up for yourself.</footer>
       </div>
     </main>
   </div>
 }
+
+function CaptureCard({ recording, recordingTitle, setRecordingTitle, startRecording, stopRecording, uploadAudio }) { return <section className="record-card"><div className="record-info"><div className="record-icon"><Mic size={21}/></div><div><h2>Capture a new lesson</h2><p>Record a lecture or bring in an audio file to get started.</p></div></div><div className="record-controls">{recording?<button className="stop-btn" onClick={stopRecording}><Square size={14} fill="currentColor"/> Finish recording</button>:<><input className="title-input" aria-label="Recording title" placeholder="Lesson title (optional)" value={recordingTitle} onChange={e=>setRecordingTitle(e.target.value)}/><button className="record-btn" onClick={startRecording}><Mic size={16}/> Record</button><label className="upload-btn"><Upload size={16}/> Upload audio<input type="file" accept="audio/*" hidden onChange={uploadAudio}/></label></>}</div></section> }
+function PageHeading({ eyebrow, title, subtitle, action }) { return <section className="page-heading"><div><div className="eyebrow">{eyebrow}</div><h1>{title}</h1><p>{subtitle}</p></div>{action}</section> }
+function ClassCard({ classroom, count, open }) { return <button className="class-card" onClick={open}><div className={`class-card-art ${classroom.color}`}><BookOpen size={25}/><span className="class-card-count">{count} {count===1?'lecture':'lectures'}</span></div><div className="class-card-body"><span className="course-name">{classroom.instructor}</span><h3>{classroom.name}</h3><p>{classroom.description}</p><span className="class-open">Open classroom <ChevronLeft size={15}/></span></div></button> }
+function LessonCard({ lesson, className, index, open }) { return <article className="lesson-card" onClick={open}><div className={`card-art ${lesson.color}`}><div className="art-orb orb-one"/><div className="art-orb orb-two"/><span className="card-art-icon">{index%3===0?'✳':index%3===1?'∑':'◈'}</span></div><div className="card-body"><div className="course-name">{className}</div><h3>{lesson.title}</h3><div className="card-meta"><span><Clock3 size={14}/>{lesson.duration}</span><span>{lesson.date}</span></div><div className="card-divider"/><div className="card-footer"><span className="ready-status"><span/> Ready to study</span><button className="arrow-btn" aria-label={`Open ${lesson.title}`} onClick={e=>{e.stopPropagation();open()}}>↗</button></div></div></article> }
+function LectureDetail({ selected, activeClass, lessonText, tab, setTab, questions, flashIndex, setFlashIndex, flipped, setFlipped, quizAnswer, setQuizAnswer, downloadNotes, copyText }) { return <section className="detail-panel"><div className="detail-top"><div><div className="course-name">{activeClass?.name}</div><h2>{selected.title}</h2><p className="detail-meta">{selected.date} <span>·</span> {selected.duration}</p></div><button className="export-btn" onClick={downloadNotes}><FileText size={16}/> Export notes</button></div><nav className="tabs">{['Overview','Transcript','Flashcards','Quiz'].map(t=><button key={t} className={tab===t?'tab-active':''} onClick={()=>setTab(t)}>{t==='Overview'?<Sparkles size={15}/>:t==='Transcript'?<FileText size={15}/>:t==='Flashcards'?<Layers3 size={15}/>:<CircleHelp size={15}/>} {t}</button>)}</nav>{tab==='Overview'&&<div className="overview-content"><div className="summary-column"><h3><span className="mini-spark">✦</span> Lesson summary <span className="ai-tag">BROWSER GENERATED</span></h3><ul>{summarize(lessonText).map((s,i)=><li key={i}>{s}</li>)}</ul></div><div className="key-points"><h3>Key concepts</h3>{summarize(lessonText).slice(0,3).map((s,i)=><div className="concept" key={i}><span>{String(i+1).padStart(2,'0')}</span><p>{s.replace(/[.!?]$/,'')}</p></div>)}</div></div>}{tab==='Transcript'&&<div className="transcript-content"><div className="transcript-heading"><h3><Headphones size={17}/> Lecture transcript</h3><button className="text-action" onClick={()=>copyText(lessonText)}>Copy text</button></div><p>{lessonText||'No transcript available for this lecture yet.'}</p>{selected.audioUrl&&<audio controls src={selected.audioUrl} className="audio-player"/>}</div>}{tab==='Flashcards'&&<Flashcards questions={questions} flashIndex={flashIndex} setFlashIndex={setFlashIndex} flipped={flipped} setFlipped={setFlipped}/ >}{tab==='Quiz'&&<Quiz questions={questions} quizAnswer={quizAnswer} setQuizAnswer={setQuizAnswer}/>}</section> }
+function Flashcards({ questions, flashIndex, setFlashIndex, flipped, setFlipped }) { const card=questions[flashIndex]; return <div className="study-area"><div className="study-kicker">FLASHCARD {questions.length?flashIndex+1:0} OF {questions.length}</div><button className={`flashcard ${flipped?'flipped':''}`} onClick={()=>setFlipped(v=>!v)}><span className="flash-label">{flipped?'ANSWER':'QUESTION'}</span><strong>{card?(flipped?card.a:card.q):'Add a transcript to create flashcards'}</strong><small>Click card to flip</small></button><div className="study-nav"><button disabled={flashIndex===0} onClick={()=>{setFlashIndex(i=>Math.max(0,i-1));setFlipped(false)}}>← Previous</button><button disabled={flashIndex>=questions.length-1} onClick={()=>{setFlashIndex(i=>Math.min(questions.length-1,i+1));setFlipped(false)}}>Next →</button></div></div> }
+function Quiz({ questions, quizAnswer, setQuizAnswer }) { if(!questions.length)return <p className="empty-state">Add a transcript to generate a quiz.</p>; const first=questions[0]; return <div className="quiz-area"><div className="study-kicker">QUICK CHECK · QUESTION 1 OF 1</div><h3>{first.q}</h3><div className="quiz-options">{[first.a,'This concept is unrelated to the lesson.','The lesson does not mention this topic.'].map((a,i)=><button key={i} className={quizAnswer===i?(i===0?'correct':'incorrect'):''} onClick={()=>setQuizAnswer(i)}>{String.fromCharCode(65+i)}<span>{a}</span>{quizAnswer===i&&i===0?<Check size={17}/>:null}</button>)}</div>{quizAnswer!==null&&<p className="feedback">{quizAnswer===0?'Correct — nice work!':'Not quite. Review the lesson summary and try again.'}</p>}</div> }
